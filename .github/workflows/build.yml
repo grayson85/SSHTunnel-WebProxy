@@ -94,4 +94,11 @@ jobs:
 
       # Step 12: Upload Windows executable
       - if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_release.outputs.release_id }}/assets{?name,label}
+          asset_path: ./ssh-tunnel-gui-windows-${{ matrix.arch }}.exe
+          asset_name: ssh-tunnel-gui-windows-${{ matrix.arch }}.exe
+          asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
