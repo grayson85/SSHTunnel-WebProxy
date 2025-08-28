@@ -55,9 +55,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           BIN_NAME="ssh-tunnel-gui-macos-${{ matrix.arch }}"
-          # Include icon
           fyne package -os darwin -name "$BIN_NAME" -icon ssh.png
-          # Zip the .app bundle for release
           zip -r "$BIN_NAME.app.zip" "$BIN_NAME.app"
 
       # Step 8: Build Windows
@@ -65,15 +63,14 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           BIN_NAME="ssh-tunnel-gui-windows-${{ matrix.arch }}"
-          # Include icon
           fyne package -os windows -name "$BIN_NAME" -icon ssh.png
 
-      # Step 9: Get Release ID
+      # Step 9: Get Release ID using PAT stored as secret
       - name: Get Release ID
         id: get_release
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.RELEASE_PAT }}  # Must be PAT
+          github-token: ${{ secrets.RELEASE_PAT }}  # <- safe secret
           script: |
             const release = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
@@ -86,34 +83,34 @@ jobs:
       - name: Upload Linux binary
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
         with:
           upload_url: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_release.outputs.release_id }}/assets{?name,label}
           asset_path: ./ssh-tunnel-gui-linux-${{ matrix.arch }}
           asset_name: ssh-tunnel-gui-linux-${{ matrix.arch }}
           asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
 
       # Step 11: Upload macOS .app.zip
       - name: Upload macOS .app.zip
         if: matrix.os == 'macos-latest'
         uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
         with:
           upload_url: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_release.outputs.release_id }}/assets{?name,label}
           asset_path: ./ssh-tunnel-gui-macos-${{ matrix.arch }}.app.zip
           asset_name: ssh-tunnel-gui-macos-${{ matrix.arch }}.zip
           asset_content_type: application/zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
 
       # Step 12: Upload Windows executable
       - name: Upload Windows executable
         if: matrix.os == 'windows-latest'
         uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
         with:
           upload_url: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_release.outputs.release_id }}/assets{?name,label}
           asset_path: ./ssh-tunnel-gui-windows-${{ matrix.arch }}.exe
           asset_name: ssh-tunnel-gui-windows-${{ matrix.arch }}.exe
           asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
