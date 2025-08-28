@@ -116,7 +116,8 @@ SSH connections will first go through the proxy, then connect to the SSH server.
 ## Screenshots
 <img width="1143" height="710" alt="image" src="https://github.com/user-attachments/assets/c29c9c6f-0af4-437a-a932-012ecf527243" />
 <img width="1771" height="1182" alt="image" src="https://github.com/user-attachments/assets/64bfa666-5c7f-4c01-a940-7b2556b7d468" />
-<img width="675" height="1390" alt="image" src="https://github.com/user-attachments/assets/944ba07b-d4ab-4af7-95b2-ed2de3e76526" />
+<img width="675" height="506" alt="image" src="https://github.com/user-attachments/assets/5493c159-58e3-4628-986f-c384799b3fa6" />
+
 
 ## License
 
