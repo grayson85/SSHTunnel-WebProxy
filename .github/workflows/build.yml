@@ -58,15 +58,19 @@ jobs:
         run: |
           BIN_NAME="ssh-tunnel-gui-macos-latest-${{ matrix.arch }}"
           fyne package -os darwin -name "$BIN_NAME" -icon ssh.png
+          # Move the .app folder to include architecture in artifact
+          mv "$BIN_NAME.app" "$BIN_NAME.app"
         shell: bash
 
       # Step 8: Build binary (Windows)
       - name: Build binary (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          $env:BIN_NAME="ssh-tunnel-gui-windows-latest-${{ matrix.arch }}.exe"
-          go build -o $env:BIN_NAME main.go
-        shell: pwsh
+          BIN_NAME="ssh-tunnel-gui-windows-latest-${{ matrix.arch }}"
+          fyne package -os windows -name "$BIN_NAME" -icon ssh.png
+          # Move the generated exe to root for artifact upload
+          mv "$BIN_NAME/$BIN_NAME.exe" "$BIN_NAME.exe"
+        shell: bash
 
       # Step 9: Upload artifacts
       - name: Upload build artifacts
@@ -74,11 +78,11 @@ jobs:
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}-binary
           path: |
-            # Linux executables
+            # Linux executable
             ssh-tunnel-gui-ubuntu-latest-${{ matrix.arch }}
 
-            # macOS app bundles
+            # macOS .app bundle
             ssh-tunnel-gui-macos-latest-${{ matrix.arch }}.app
 
-            # Windows executables
+            # Windows executable
             ssh-tunnel-gui-windows-latest-${{ matrix.arch }}.exe
