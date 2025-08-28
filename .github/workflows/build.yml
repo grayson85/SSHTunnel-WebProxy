@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        arch: [amd64, arm64]  # amd64 = Intel, arm64 = M1/M2 Macs
+        arch: [amd64, arm64]
 
     steps:
       - uses: actions/checkout@v3
@@ -25,22 +26,39 @@ jobs:
       - name: Install Fyne tool
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
 
-      - name: Build binary
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libgl1-mesa-dev libx11-dev libxi-dev \
+            libxcursor-dev libxrandr-dev libxinerama-dev libxxf86vm-dev libvulkan-dev
+
+      - name: Install macOS dependencies
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install glfw
+
+      - name: Build binary (Linux/macOS)
+        if: matrix.os != 'windows-latest'
         run: |
           echo "Building for OS=${{ matrix.os }} ARCH=${{ matrix.arch }}"
           BIN_NAME="ssh-tunnel-gui-${{ matrix.os }}-${{ matrix.arch }}"
-          
-          # macOS Fyne requires -os darwin, -arch arm64/intel
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             FYNE_OS=darwin
             FYNE_ARCH=${{ matrix.arch }}
             fyne package -os $FYNE_OS -arch $FYNE_ARCH -name "$BIN_NAME" -icon ssh.png
           else
-            # cross-compile for Windows/Linux
-            GOOS=$(echo ${{ matrix.os }} | awk '{print tolower($0)}')
-            GOARCH=${{ matrix.arch }}
             go build -o $BIN_NAME main.go
           fi
+        shell: bash
+
+      - name: Build binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $env:BIN_NAME="ssh-tunnel-gui-windows-${{ matrix.arch }}"
+          go build -o $env:BIN_NAME main.go
+        shell: pwsh
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
