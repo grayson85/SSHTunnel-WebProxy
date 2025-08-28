@@ -58,8 +58,6 @@ jobs:
         run: |
           BIN_NAME="ssh-tunnel-gui-macos-latest-${{ matrix.arch }}"
           fyne package -os darwin -name "$BIN_NAME" -icon ssh.png
-          # Move the .app folder to include architecture in artifact
-          mv "$BIN_NAME.app" "$BIN_NAME.app"
         shell: bash
 
       # Step 8: Build binary (Windows)
@@ -68,7 +66,7 @@ jobs:
         run: |
           BIN_NAME="ssh-tunnel-gui-windows-latest-${{ matrix.arch }}"
           fyne package -os windows -name "$BIN_NAME" -icon ssh.png
-          # Move the generated exe to root for artifact upload
+          # Move generated exe from subfolder to root for artifact upload
           mv "$BIN_NAME/$BIN_NAME.exe" "$BIN_NAME.exe"
         shell: bash
 
