@@ -53,6 +53,7 @@ jobs:
         run: |
           BIN_NAME="ssh-tunnel-gui-${{ matrix.suffix }}"
           go build -ldflags="-s -w" -o "$BIN_NAME" main.go
+          ls -la
       
       # Step 7: Build macOS .app and zip
       - if: runner.os == 'macOS'
@@ -64,6 +65,9 @@ jobs:
             fyne package -os darwin -name "$BIN_NAME"
           fi
           zip -r "$BIN_NAME.app.zip" "$BIN_NAME.app"
+          # Clean up to avoid uploading individual app contents
+          rm -rf "$BIN_NAME.app"
+          ls -la
       
       # Step 8: Build Windows .exe
       - if: runner.os == 'Windows'
@@ -74,17 +78,18 @@ jobs:
           } else {
             fyne package -os windows -name $BIN_NAME
           }
+          Get-ChildItem
         shell: powershell
       
-      # Step 9: Upload build artifacts
+      # Step 9: Upload build artifacts (only final binaries)
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ssh-tunnel-gui-${{ matrix.suffix }}
           path: |
-            ssh-tunnel-gui-*
-            *.app.zip
-            *.exe
+            ssh-tunnel-gui-${{ matrix.suffix }}
+            ssh-tunnel-gui-${{ matrix.suffix }}.app.zip
+            ssh-tunnel-gui-${{ matrix.suffix }}.exe
           retention-days: 30
 
   # Release job - runs after all builds complete
@@ -105,12 +110,20 @@ jobs:
       - name: Display structure
         run: find ./artifacts -type f
       
+      - name: Prepare release files
+        run: |
+          mkdir -p ./release-files
+          find ./artifacts -name "ssh-tunnel-gui-*" -type f -exec cp {} ./release-files/ \;
+          find ./artifacts -name "*.app.zip" -type f -exec cp {} ./release-files/ \;
+          find ./artifacts -name "*.exe" -type f -exec cp {} ./release-files/ \;
+          ls -la ./release-files/
+      
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v1.0-${{ github.run_number }}
           name: Release v1.0-${{ github.run_number }}
-          files: ./artifacts/**/*
+          files: ./release-files/*
           draft: false
           prerelease: false
           generate_release_notes: true
