@@ -9,8 +9,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        arch: [amd64, arm64]
+        include:
+          # Native builds only
+          - os: ubuntu-latest
+            arch: amd64
+            suffix: linux-amd64
+          - os: macos-13  # Intel Mac
+            arch: amd64
+            suffix: macos-amd64
+          - os: macos-14  # Apple Silicon Mac
+            arch: arm64
+            suffix: macos-arm64
+          - os: windows-latest
+            arch: amd64
+            suffix: windows-amd64
     steps:
       # Step 1: Checkout code
       - uses: actions/checkout@v4
@@ -24,41 +36,28 @@ jobs:
       - run: go install fyne.io/fyne/v2/cmd/fyne@latest
       
       # Step 4: Linux dependencies
-      - if: matrix.os == 'ubuntu-latest'
+      - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libgl1-mesa-dev libx11-dev libxi-dev \
             libxcursor-dev libxrandr-dev libxinerama-dev libxxf86vm-dev
       
       # Step 5: macOS dependencies
-      - if: matrix.os == 'macos-latest'
+      - if: runner.os == 'macOS'
         run: |
           brew update || true
           brew install glfw || true
       
-      # Step 6: Set cross-compilation environment
-      - name: Set build environment
+      # Step 6: Build Linux binary
+      - if: runner.os == 'Linux'
         run: |
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            echo "GOOS=linux" >> $GITHUB_ENV
-          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            echo "GOOS=darwin" >> $GITHUB_ENV
-          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
-            echo "GOOS=windows" >> $GITHUB_ENV
-          fi
-          echo "GOARCH=${{ matrix.arch }}" >> $GITHUB_ENV
-        shell: bash
-      
-      # Step 7: Build Linux binary
-      - if: matrix.os == 'ubuntu-latest'
-        run: |
-          BIN_NAME="ssh-tunnel-gui-linux-${{ matrix.arch }}"
+          BIN_NAME="ssh-tunnel-gui-${{ matrix.suffix }}"
           go build -ldflags="-s -w" -o "$BIN_NAME" main.go
       
-      # Step 8: Build macOS .app and zip
-      - if: matrix.os == 'macos-latest'
+      # Step 7: Build macOS .app and zip
+      - if: runner.os == 'macOS'
         run: |
-          BIN_NAME="ssh-tunnel-gui-macos-${{ matrix.arch }}"
+          BIN_NAME="ssh-tunnel-gui-${{ matrix.suffix }}"
           if [ -f "ssh.png" ]; then
             fyne package -os darwin -name "$BIN_NAME" -icon ssh.png
           else
@@ -66,10 +65,10 @@ jobs:
           fi
           zip -r "$BIN_NAME.app.zip" "$BIN_NAME.app"
       
-      # Step 9: Build Windows .exe
-      - if: matrix.os == 'windows-latest'
+      # Step 8: Build Windows .exe
+      - if: runner.os == 'Windows'
         run: |
-          $BIN_NAME = "ssh-tunnel-gui-windows-${{ matrix.arch }}"
+          $BIN_NAME = "ssh-tunnel-gui-${{ matrix.suffix }}"
           if (Test-Path "ssh.png") {
             fyne package -os windows -name $BIN_NAME -icon ssh.png
           } else {
@@ -77,11 +76,11 @@ jobs:
           }
         shell: powershell
       
-      # Step 10: Upload build artifacts
+      # Step 9: Upload build artifacts
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ssh-tunnel-gui-${{ matrix.os }}-${{ matrix.arch }}
+          name: ssh-tunnel-gui-${{ matrix.suffix }}
           path: |
             ssh-tunnel-gui-*
             *.app.zip
