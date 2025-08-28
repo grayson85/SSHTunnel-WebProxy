@@ -62,12 +62,12 @@ jobs:
           BIN_NAME="ssh-tunnel-gui-windows-${{ matrix.arch }}"
           fyne package -os windows -name "$BIN_NAME" -icon ssh.png
 
-      # Get release ID (fixed)
+      # Get release ID
       - name: Get Release ID
         id: get_release
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.RELEASE_PAT }}
           script: |
             const release = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
@@ -81,7 +81,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
         with:
           upload_url: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_release.outputs.release_id }}/assets{?name,label}
           asset_path: ./ssh-tunnel-gui-linux-${{ matrix.arch }}
@@ -93,7 +93,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
         with:
           upload_url: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_release.outputs.release_id }}/assets{?name,label}
           asset_path: ./ssh-tunnel-gui-macos-${{ matrix.arch }}.app.zip
@@ -105,7 +105,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
         with:
           upload_url: https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.get_release.outputs.release_id }}/assets{?name,label}
           asset_path: ./ssh-tunnel-gui-windows-${{ matrix.arch }}.exe
