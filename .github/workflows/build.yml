@@ -3,12 +3,32 @@ name: Build SSH Tunnel GUI App
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.get_release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v3
+
+      # Step 1: Get existing release (v1.0)
+      - name: Get Release
+        id: get_release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const release = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: "v1.0"
+            });
+            return { upload_url: release.data.upload_url };
+
   build:
+    needs: release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -16,20 +36,17 @@ jobs:
         arch: [amd64, arm64]
 
     steps:
-      # Step 1: Checkout code
       - uses: actions/checkout@v3
 
-      # Step 2: Setup Go
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: 1.21
 
-      # Step 3: Install Fyne tool
       - name: Install Fyne tool
         run: go install fyne.io/tools/cmd/fyne@latest
 
-      # Step 4: Linux dependencies
+      # Linux dependencies
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -37,81 +54,67 @@ jobs:
           sudo apt-get install -y pkg-config libgl1-mesa-dev libx11-dev libxi-dev \
             libxcursor-dev libxrandr-dev libxinerama-dev libxxf86vm-dev libvulkan-dev
 
-      # Step 5: macOS dependencies
+      # macOS dependencies
       - name: Install macOS dependencies
         if: matrix.os == 'macos-latest'
         run: |
           brew update
           brew install glfw
 
-      # Step 6: Build binary (Linux)
-      - name: Build binary (Linux)
+      # Build Linux
+      - name: Build Linux binary
         if: matrix.os == 'ubuntu-latest'
         run: |
-          BIN_NAME="ssh-tunnel-gui-ubuntu-latest-${{ matrix.arch }}"
+          BIN_NAME="ssh-tunnel-gui-linux-${{ matrix.arch }}"
           go build -o $BIN_NAME main.go
-        shell: bash
 
-      # Step 7: Build binary (macOS)
-      - name: Build binary (macOS)
+      # Build macOS
+      - name: Build macOS binary
         if: matrix.os == 'macos-latest'
         run: |
-          BIN_NAME="ssh-tunnel-gui-macos-latest-${{ matrix.arch }}"
+          BIN_NAME="ssh-tunnel-gui-macos-${{ matrix.arch }}"
           fyne package -os darwin -name "$BIN_NAME" -icon ssh.png
           zip -r "$BIN_NAME.app.zip" "$BIN_NAME.app"
-        shell: bash
 
-      # Step 8: Build binary (Windows)
-      - name: Build binary (Windows)
+      # Build Windows
+      - name: Build Windows binary
         if: matrix.os == 'windows-latest'
         run: |
-          BIN_NAME="ssh-tunnel-gui-windows-latest-${{ matrix.arch }}"
+          BIN_NAME="ssh-tunnel-gui-windows-${{ matrix.arch }}"
           fyne package -os windows -name "$BIN_NAME" -icon ssh.png
-        shell: bash
 
-      # Step 9: Create GitHub Release (only once per workflow run)
-      - name: Create Release
-        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'amd64'  # avoid repeating for all matrix jobs
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v1.0.0
-          release_name: SSH Tunnel GUI App v1.0
-          draft: false
-          prerelease: false
-
-      # Step 10: Upload binaries to Release
-      - name: Upload Windows executable
-        if: matrix.os == 'windows-latest'
+      # Upload Linux
+      - name: Upload Linux binary to release
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ssh-tunnel-gui-windows-latest-${{ matrix.arch }}.exe
-          asset_name: ssh-tunnel-gui-windows-${{ matrix.arch }}.exe
+          upload_url: ${{ needs.release.outputs.upload_url }}
+          asset_path: ./ssh-tunnel-gui-linux-${{ matrix.arch }}
+          asset_name: ssh-tunnel-gui-linux-${{ matrix.arch }}
           asset_content_type: application/octet-stream
 
-      - name: Upload macOS .app (zipped)
+      # Upload macOS
+      - name: Upload macOS .app.zip to release
         if: matrix.os == 'macos-latest'
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ssh-tunnel-gui-macos-latest-${{ matrix.arch }}.app.zip
+          upload_url: ${{ needs.release.outputs.upload_url }}
+          asset_path: ./ssh-tunnel-gui-macos-${{ matrix.arch }}.app.zip
           asset_name: ssh-tunnel-gui-macos-${{ matrix.arch }}.zip
           asset_content_type: application/zip
 
-      - name: Upload Linux executable
-        if: matrix.os == 'ubuntu-latest'
+      # Upload Windows
+      - name: Upload Windows executable to release
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ssh-tunnel-gui-ubuntu-latest-${{ matrix.arch }}
-          asset_name: ssh-tunnel-gui-linux-${{ matrix.arch }}
+          upload_url: ${{ needs.release.outputs.upload_url }}
+          asset_path: ./ssh-tunnel-gui-windows-${{ matrix.arch }}.exe
+          asset_name: ssh-tunnel-gui-windows-${{ matrix.arch }}.exe
           asset_content_type: application/octet-stream
