@@ -25,14 +25,14 @@ jobs:
       # Step 3: Install Fyne tool
       - run: go install fyne.io/tools/cmd/fyne@latest
 
-      # Step 4: Install dependencies for Linux
+      # Step 4: Linux dependencies
       - if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libgl1-mesa-dev libx11-dev libxi-dev \
             libxcursor-dev libxrandr-dev libxinerama-dev libxxf86vm-dev libvulkan-dev
 
-      # Step 5: Install dependencies for macOS
+      # Step 5: macOS dependencies
       - if: matrix.os == 'macos-latest'
         run: |
           brew update
@@ -57,7 +57,7 @@ jobs:
           BIN_NAME="ssh-tunnel-gui-windows-${{ matrix.arch }}"
           fyne package -os windows -name "$BIN_NAME" -icon ssh.png
 
-      # Step 9: Get release ID using PAT
+      # Step 9: Get release ID using GitHub Script
       - id: get_release
         uses: actions/github-script@v7
         with:
@@ -68,7 +68,7 @@ jobs:
               repo: context.repo.repo,
               tag: 'v1.0'
             });
-            core.setOutput("release_id", release.data.id)
+            core.setOutput("release_id", release.data.id);
 
       # Step 10: Upload Linux binary
       - if: matrix.os == 'ubuntu-latest'
