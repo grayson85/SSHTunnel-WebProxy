@@ -57,11 +57,11 @@ jobs:
           BIN_NAME="ssh-tunnel-gui-windows-${{ matrix.arch }}"
           fyne package -os windows -name "$BIN_NAME" -icon ssh.png
 
-      # Step 9: Get Release ID using github-script
+      # Step 9: Get Release ID using PAT
       - id: get_release
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.RELEASE_PAT }}   # MUST be under with:, not env
+          github-token: ${{ secrets.RELEASE_PAT }}   # <- must be under 'with:'
           script: |
             const release = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
