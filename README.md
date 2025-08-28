@@ -1,7 +1,7 @@
 # SSH Tunnels + Web Proxy GUI
 
 A simple GUI application in **Go** using **Fyne** to manage SSH tunnels, dynamic port forwarding (SOCKS), and optional HTTP/HTTPS proxy support. Supports password/key-based authentication, including 2FA.
-
+[![Build SSH Tunnel GUI App](https://github.com/grayson85/SSHTunnel-WebProxy/actions/workflows/build.yml/badge.svg)](https://github.com/grayson85/SSHTunnel-WebProxy/actions/workflows/build.yml)
 ---
 
 ## Features
