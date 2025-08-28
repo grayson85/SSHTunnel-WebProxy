@@ -65,9 +65,8 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           BIN_NAME="ssh-tunnel-gui-windows-latest-${{ matrix.arch }}"
+          # Fyne automatically appends .exe
           fyne package -os windows -name "$BIN_NAME" -icon ssh.png
-          # Move generated exe from subfolder to root for artifact upload
-          mv "$BIN_NAME/$BIN_NAME.exe" "$BIN_NAME.exe"
         shell: bash
 
       # Step 9: Upload artifacts
