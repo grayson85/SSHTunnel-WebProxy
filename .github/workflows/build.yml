@@ -5,7 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:   # Manual trigger from GitHub website
+  workflow_dispatch:
 
 jobs:
   build:
@@ -25,11 +25,11 @@ jobs:
         with:
           go-version: 1.21
 
-      # Step 3: Install Fyne tool (new version)
+      # Step 3: Install Fyne tool
       - name: Install Fyne tool
         run: go install fyne.io/tools/cmd/fyne@latest
 
-      # Step 4: Install Linux dependencies
+      # Step 4: Linux dependencies
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -37,39 +37,48 @@ jobs:
           sudo apt-get install -y pkg-config libgl1-mesa-dev libx11-dev libxi-dev \
             libxcursor-dev libxrandr-dev libxinerama-dev libxxf86vm-dev libvulkan-dev
 
-      # Step 5: Install macOS dependencies
+      # Step 5: macOS dependencies
       - name: Install macOS dependencies
         if: matrix.os == 'macos-latest'
         run: |
           brew update
           brew install glfw
 
-      # Step 6: Build binary (Linux/macOS)
-      - name: Build binary (Linux/macOS)
-        if: matrix.os != 'windows-latest'
+      # Step 6: Build binary (Linux)
+      - name: Build binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          echo "Building for OS=${{ matrix.os }} ARCH=${{ matrix.arch }}"
-          BIN_NAME="ssh-tunnel-gui-${{ matrix.os }}-${{ matrix.arch }}"
-          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            fyne package -os darwin -name "$BIN_NAME" -icon ssh.png
-          else
-            go build -o $BIN_NAME main.go
-          fi
+          BIN_NAME="ssh-tunnel-gui-ubuntu-latest-${{ matrix.arch }}"
+          go build -o $BIN_NAME main.go
         shell: bash
 
-      # Step 7: Build binary (Windows)
+      # Step 7: Build binary (macOS)
+      - name: Build binary (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          BIN_NAME="ssh-tunnel-gui-macos-latest-${{ matrix.arch }}"
+          fyne package -os darwin -name "$BIN_NAME" -icon ssh.png
+        shell: bash
+
+      # Step 8: Build binary (Windows)
       - name: Build binary (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          $env:BIN_NAME="ssh-tunnel-gui-windows-${{ matrix.arch }}.exe"
+          $env:BIN_NAME="ssh-tunnel-gui-windows-latest-${{ matrix.arch }}.exe"
           go build -o $env:BIN_NAME main.go
         shell: pwsh
 
-      # Step 8: Upload build artifacts
+      # Step 9: Upload artifacts
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}-binary
           path: |
-            ssh-tunnel-gui-${{ matrix.os }}-${{ matrix.arch }}*   # Linux/macOS
-            ssh-tunnel-gui-windows-${{ matrix.arch }}.exe         # Windows
+            # Linux executables
+            ssh-tunnel-gui-ubuntu-latest-${{ matrix.arch }}
+
+            # macOS app bundles
+            ssh-tunnel-gui-macos-latest-${{ matrix.arch }}.app
+
+            # Windows executables
+            ssh-tunnel-gui-windows-latest-${{ matrix.arch }}.exe
