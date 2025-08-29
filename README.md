@@ -121,8 +121,13 @@ SSH connections will first go through the proxy, then connect to the SSH server.
 
 ## License
 
+The **SSHTunnel-WebProxy** base application is open source and follows the license declared in this repository.  
 
+The **SSHTunnel-WebProxy Extended Features** (such as [list any extra modules, plugins, or enterprise add-ons]) are made available under a separate license.  
+These extended features are free for personal and educational use under the **Personal Use and Educational License (PUEL)**.  
+For most commercial or non-distribution uses, the extended features are available under a commercial license agreement.  
 
+For information about rights to distribute the **SSHTunnel-WebProxy Extended Features**, please contact us via [GitHub](https://github.com/grayson85/SSHTunnel-WebProxy).
 
 MIT License © Grayson Lee
 
