@@ -106,7 +106,7 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p ./release-files
-          cp ./artifacts/* ./release-files/
+          cp -r ./artifacts/* ./release-files/
           ls -la ./release-files/
 
       - name: Create Release
