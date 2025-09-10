@@ -2,10 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"sync"
-
+	"time"
 	"fyne.io/fyne/v2/widget"
+	
+	"golang.org/x/crypto/ssh"
 )
 
 type ForwardType int
@@ -24,6 +27,33 @@ func (ft ForwardType) String() string {
 		return "Remote"
 	case ForwardDynamic:
 		return "Dynamic (SOCKS)"
+	default:
+		return "Unknown"
+	}
+}
+
+type TunnelStatus int
+
+const (
+	StatusStopped TunnelStatus = iota
+	StatusConnecting
+	StatusConnected
+	StatusError
+	StatusDisconnected
+)
+
+func (s TunnelStatus) String() string {
+	switch s {
+	case StatusStopped:
+		return "Stopped"
+	case StatusConnecting:
+		return "Connecting"
+	case StatusConnected:
+		return "Connected"
+	case StatusError:
+		return "Error"
+	case StatusDisconnected:
+		return "Disconnected"
 	default:
 		return "Unknown"
 	}
@@ -60,6 +90,25 @@ type TunnelConfig struct {
 	Forwards []ForwardConfig `json:"forwards"`
 }
 
+type RunningTunnel struct {
+	Cfg           TunnelConfig
+	Status        TunnelStatus
+	ErrorMsg      string
+	LastHeartbeat time.Time
+	Client        *ssh.Client
+	closers       []io.Closer
+	wg            sync.WaitGroup
+	mu            sync.Mutex
+	stopping      bool
+	stopped       chan struct{}
+}
+
+type sshConnection struct {
+	client   *ssh.Client
+	mu       sync.Mutex
+	refCount int
+}
+
 type AppState struct {
 	configs      []TunnelConfig
 	running      map[int]*RunningTunnel
@@ -68,6 +117,7 @@ type AppState struct {
 	selectedIdx  int
 	connections  map[string]*sshConnection
 	connMu       sync.Mutex
+	statusTicker *time.Ticker
 }
 
 func saveConfigFile(cfgs []TunnelConfig, file string) error {
