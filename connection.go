@@ -12,17 +12,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 )
-
-type sshConnection struct {
-	client   *ssh.Client
-	mu       sync.Mutex
-	refCount int
-}
 
 func (state *AppState) getSSHConnection(cfg TunnelConfig, twoFACode string) (*ssh.Client, error) {
 	key := fmt.Sprintf("%s@%s:%d", cfg.Auth.User, cfg.SSHHost, cfg.SSHPort)
