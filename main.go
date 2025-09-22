@@ -74,7 +74,6 @@ func getConfigPath() string {
 
 func main() {
 	a := app.New()
-	a.Settings().SetTheme(theme.LightTheme()) // Explicitly set light theme
 	
 	w := a.NewWindow("SSH Tunnels + Web Proxy @GraysonLee - v2.0")
 	w.Resize(fyne.NewSize(980, 620))
@@ -745,4 +744,5 @@ func (state *AppState) deleteSelected(configFile string) {
 	state.refreshList()
 	state.updateStatus()
 }
+
 
