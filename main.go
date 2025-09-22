@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -15,12 +17,97 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+func getConfigPath() string {
+	// Try multiple locations for the config file
+	locations := []string{}
+	
+	// 1. Current working directory (for development)
+	locations = append(locations, "tunnels.json")
+	
+	// 2. User's home directory
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		locations = append(locations, filepath.Join(homeDir, "tunnels.json"))
+		locations = append(locations, filepath.Join(homeDir, ".ssh-tunnels", "tunnels.json"))
+	}
+	
+	// 3. Application support directory (macOS standard)
+	if configDir, err := os.UserConfigDir(); err == nil {
+		appConfigDir := filepath.Join(configDir, "SSH-Tunnels")
+		os.MkdirAll(appConfigDir, 0755) // Create directory if it doesn't exist
+		locations = append(locations, filepath.Join(appConfigDir, "tunnels.json"))
+	}
+	
+	// 4. Same directory as the executable
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		locations = append(locations, filepath.Join(execDir, "tunnels.json"))
+	}
+	
+	// Check which location has an existing config file
+	for _, path := range locations {
+		if _, err := os.Stat(path); err == nil {
+			log.Printf("Found existing config at: %s", path)
+			return path
+		}
+	}
+	
+	// If no existing config found, use the standard app config location
+	if configDir, err := os.UserConfigDir(); err == nil {
+		appConfigDir := filepath.Join(configDir, "SSH-Tunnels")
+		os.MkdirAll(appConfigDir, 0755)
+		configPath := filepath.Join(appConfigDir, "tunnels.json")
+		log.Printf("Using new config location: %s", configPath)
+		return configPath
+	}
+	
+	// Fallback to home directory
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		configPath := filepath.Join(homeDir, "tunnels.json")
+		log.Printf("Fallback config location: %s", configPath)
+		return configPath
+	}
+	
+	// Last resort - current directory
+	log.Printf("Using current directory for config: tunnels.json")
+	return "tunnels.json"
+}
+
 func main() {
+	// Try to fix Windows OpenGL issues
+	os.Setenv("FYNE_FONT", "")
+	os.Setenv("FYNE_THEME", "light")
+	
 	a := app.New()
+	a.Settings().SetTheme(theme.LightTheme()) // Explicitly set light theme
+	
 	w := a.NewWindow("SSH Tunnels + Web Proxy @GraysonLee - v2.0")
 	w.Resize(fyne.NewSize(980, 620))
 
-	configFile := "tunnels.json"
+	// Use intelligent config path detection
+	configFile := getConfigPath()
+	log.Printf("Using config file: %s", configFile)
+	// Add menu to show config location
+	mainMenu := fyne.NewMainMenu(
+		fyne.NewMenu("File",
+			fyne.NewMenuItem("Show Config Location", func() {
+				dialog.ShowInformation("Config File Location", 
+					fmt.Sprintf("Configuration file is stored at:\n\n%s\n\nOn macOS, this is typically in:\n~/Library/Application Support/SSH-Tunnels/", configFile), w)
+			}),
+			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem("Open Config Folder", func() {
+				configDir := filepath.Dir(configFile)
+				dialog.ShowInformation("Config Folder", 
+					fmt.Sprintf("Config folder location:\n\n%s\n\nYou can open this folder in Finder to manually edit or backup your config files.", configDir), w)
+			}),
+		),
+		fyne.NewMenu("Help",
+			fyne.NewMenuItem("About", func() {
+				dialog.ShowInformation("About", "SSH Tunnels + Web Proxy @GraysonLee - v2.0\n\nA GUI application for managing SSH tunnels and SOCKS proxies.", w)
+			}),
+		),
+	)
+	w.SetMainMenu(mainMenu)
+	
 	state := &AppState{
 		running:     make(map[int]*RunningTunnel),
 		selectedIdx: -1,
@@ -167,9 +254,21 @@ func (state *AppState) startSelected(w fyne.Window) {
 		return
 	}
 	idx := state.selectedIdx
-	if rt, exists := state.running[idx]; exists && rt.Status == StatusConnected {
-		state.status.SetText("Tunnel already running")
-		return
+	
+	// Check if there's already a tunnel running/connecting for this index
+	if rt, exists := state.running[idx]; exists {
+		if rt.Status == StatusConnected {
+			state.status.SetText("Tunnel already running")
+			return
+		} else if rt.Status == StatusConnecting {
+			state.status.SetText("Tunnel is already connecting")
+			return
+		} else if rt.Status == StatusDisconnected || rt.Status == StatusError {
+			// Clean up the old disconnected tunnel first
+			log.Printf("Cleaning up old disconnected tunnel before starting new one")
+			rt.stop(state)
+			delete(state.running, idx)
+		}
 	}
 	
 	cfg := state.configs[idx]
@@ -270,12 +369,35 @@ func (state *AppState) startStatusMonitoring() {
 func (state *AppState) checkConnectionHealth() {
 	needsRefresh := false
 	
-	for _, rt := range state.running {
+	for idx, rt := range state.running {
 		if rt.Status == StatusConnected {
 			// Check if connection is still healthy
 			if !state.isConnectionHealthy(rt) {
+				log.Printf("Connection lost for tunnel %d, cleaning up resources", idx)
 				rt.Status = StatusDisconnected
 				rt.ErrorMsg = "Connection lost"
+				
+				// Important: Clean up the tunnel resources when connection is lost
+				go func(tunnel *RunningTunnel, tunnelIdx int) {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Printf("Panic during auto-cleanup: %v", r)
+						}
+					}()
+					
+					log.Printf("Auto-cleaning up disconnected tunnel %d", tunnelIdx)
+					tunnel.stop(state)
+					
+					// Remove from running tunnels
+					state.connMu.Lock()
+					delete(state.running, tunnelIdx)
+					state.connMu.Unlock()
+					
+					// Update UI
+					state.updateStatus()
+					state.refreshList()
+				}(rt, idx)
+				
 				needsRefresh = true
 			} else {
 				rt.LastHeartbeat = time.Now()
