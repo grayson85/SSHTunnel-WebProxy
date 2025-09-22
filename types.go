@@ -3,12 +3,14 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
-	"fyne.io/fyne/v2/widget"
 	
 	"golang.org/x/crypto/ssh"
+	"fyne.io/fyne/v2/widget"
 )
 
 type ForwardType int
@@ -131,9 +133,59 @@ func saveConfigFile(cfgs []TunnelConfig, file string) error {
 func loadConfigFile(file string) ([]TunnelConfig, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return []TunnelConfig{}, nil
+		// If file doesn't exist, try to find and migrate from old locations
+		if os.IsNotExist(err) {
+			log.Printf("Config file %s not found, checking for existing configs to migrate", file)
+			return migrateConfigFromOldLocations(file)
+		}
+		return []TunnelConfig{}, err
 	}
 	var cfgs []TunnelConfig
 	err = json.Unmarshal(data, &cfgs)
+	if err != nil {
+		log.Printf("Error parsing config file: %v", err)
+		return []TunnelConfig{}, err
+	}
+	log.Printf("Loaded %d tunnel configurations from %s", len(cfgs), file)
 	return cfgs, err
+}
+
+func migrateConfigFromOldLocations(newPath string) ([]TunnelConfig, error) {
+	// Try to find config in old locations
+	oldLocations := []string{
+		"tunnels.json", // Current directory
+	}
+	
+	// Add home directory
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		oldLocations = append(oldLocations, filepath.Join(homeDir, "tunnels.json"))
+	}
+	
+	// Add executable directory
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		oldLocations = append(oldLocations, filepath.Join(execDir, "tunnels.json"))
+	}
+	
+	for _, oldPath := range oldLocations {
+		if data, err := os.ReadFile(oldPath); err == nil {
+			log.Printf("Found existing config at %s, migrating to %s", oldPath, newPath)
+			
+			var cfgs []TunnelConfig
+			if err := json.Unmarshal(data, &cfgs); err == nil {
+				// Save to new location
+				if saveErr := saveConfigFile(cfgs, newPath); saveErr == nil {
+					log.Printf("Successfully migrated %d configurations to %s", len(cfgs), newPath)
+					return cfgs, nil
+				} else {
+					log.Printf("Failed to save migrated config: %v", saveErr)
+				}
+			} else {
+				log.Printf("Failed to parse old config file %s: %v", oldPath, err)
+			}
+		}
+	}
+	
+	log.Printf("No existing config found, starting with empty configuration")
+	return []TunnelConfig{}, nil
 }
