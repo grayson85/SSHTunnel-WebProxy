@@ -73,10 +73,6 @@ func getConfigPath() string {
 }
 
 func main() {
-	// Try to fix Windows OpenGL issues
-	os.Setenv("FYNE_FONT", "")
-	os.Setenv("FYNE_THEME", "light")
-	
 	a := app.New()
 	a.Settings().SetTheme(theme.LightTheme()) // Explicitly set light theme
 	
@@ -749,3 +745,4 @@ func (state *AppState) deleteSelected(configFile string) {
 	state.refreshList()
 	state.updateStatus()
 }
+
