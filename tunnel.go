@@ -7,7 +7,9 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"time"
+	
 )
 
 func safeGo(fn func()) {
@@ -25,6 +27,9 @@ func (rt *RunningTunnel) start(twoFACode string, state *AppState) error {
 	// Set status to connecting at the start
 	rt.Status = StatusConnecting
 	rt.ErrorMsg = ""
+	
+	// First, ensure we don't have any leftover resources
+	rt.cleanupResources()
 	
 	client, err := state.getSSHConnection(rt.Cfg, twoFACode)
 	if err != nil {
@@ -46,8 +51,21 @@ func (rt *RunningTunnel) start(twoFACode string, state *AppState) error {
 			ln, err := net.Listen("tcp", f.LocalAddr)
 			if err != nil {
 				log.Printf("Failed to listen on %s: %v", f.LocalAddr, err)
-				setupErr = fmt.Errorf("listen on %s failed: %w", f.LocalAddr, err)
-			} else {
+				// If port is in use, it might be from a previous disconnected tunnel
+				if strings.Contains(err.Error(), "address already in use") || strings.Contains(err.Error(), "bind: address already in use") {
+					log.Printf("Port %s appears to be in use, attempting to find and clean up old resources", f.LocalAddr)
+					// Try to wait a bit and retry
+					time.Sleep(1 * time.Second)
+					ln, err = net.Listen("tcp", f.LocalAddr)
+					if err != nil {
+						setupErr = fmt.Errorf("port %s still in use after cleanup attempt: %w", f.LocalAddr, err)
+					}
+				} else {
+					setupErr = fmt.Errorf("listen on %s failed: %w", f.LocalAddr, err)
+				}
+			}
+			
+			if setupErr == nil {
 				log.Printf("Listening on %s", f.LocalAddr)
 				rt.closers = append(rt.closers, ln)
 				rt.wg.Add(1)
@@ -63,19 +81,34 @@ func (rt *RunningTunnel) start(twoFACode string, state *AppState) error {
 				}
 			})
 		case ForwardDynamic:
-			rt.wg.Add(1)
-			safeGo(func() { 
-				if err := rt.dynamicForward(f.LocalAddr); err != nil {
-					log.Printf("Dynamic forward failed: %v", err)
-					rt.Status = StatusError
-					rt.ErrorMsg = err.Error()
+			ln, err := net.Listen("tcp", f.LocalAddr)
+			if err != nil {
+				log.Printf("Failed to listen on SOCKS port %s: %v", f.LocalAddr, err)
+				if strings.Contains(err.Error(), "address already in use") || strings.Contains(err.Error(), "bind: address already in use") {
+					log.Printf("SOCKS port %s appears to be in use, attempting cleanup and retry", f.LocalAddr)
+					time.Sleep(1 * time.Second)
+					ln, err = net.Listen("tcp", f.LocalAddr)
+					if err != nil {
+						setupErr = fmt.Errorf("SOCKS port %s still in use after cleanup: %w", f.LocalAddr, err)
+					}
+				} else {
+					setupErr = fmt.Errorf("SOCKS listen on %s failed: %w", f.LocalAddr, err)
 				}
-			})
+			}
+			
+			if setupErr == nil {
+				log.Printf("SOCKS proxy listening on %s", f.LocalAddr)
+				rt.closers = append(rt.closers, ln)
+				rt.wg.Add(1)
+				safeGo(func() { rt.acceptLoop(ln, "", true) })
+			}
 		}
 		
 		if setupErr != nil {
 			rt.Status = StatusError
 			rt.ErrorMsg = setupErr.Error()
+			// Clean up any resources we did manage to create
+			rt.cleanupResources()
 			return setupErr
 		}
 	}
@@ -88,7 +121,55 @@ func (rt *RunningTunnel) start(twoFACode string, state *AppState) error {
 	return nil
 }
 
+// New helper method to clean up resources
+func (rt *RunningTunnel) cleanupResources() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Panic during resource cleanup: %v", r)
+		}
+	}()
+	
+	// Close any existing listeners
+	for i, c := range rt.closers {
+		if c != nil {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("Panic closing resource %d: %v", i, r)
+					}
+				}()
+				c.Close()
+			}()
+		}
+	}
+	rt.closers = nil // Clear the slice
+	
+	// Close stopped channel if it exists
+	if rt.stopped != nil {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// Channel might already be closed, ignore
+				}
+			}()
+			select {
+			case <-rt.stopped:
+				// Already closed
+			default:
+				close(rt.stopped)
+			}
+		}()
+		rt.stopped = nil
+	}
+}
+
 func (rt *RunningTunnel) stop(state *AppState) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Panic in tunnel stop recovered: %v", r)
+		}
+	}()
+
 	rt.mu.Lock()
 	if rt.stopping {
 		rt.mu.Unlock()
@@ -100,36 +181,63 @@ func (rt *RunningTunnel) stop(state *AppState) {
 
 	log.Printf("Stopping tunnel for %s@%s:%d", rt.Cfg.Auth.User, rt.Cfg.SSHHost, rt.Cfg.SSHPort)
 
-	// Close all listeners first
-	for _, c := range rt.closers {
-		if c != nil {
-			c.Close()
-		}
-	}
+	// Use the new cleanup method
+	rt.cleanupResources()
 
-	// Handle SSH connection cleanup
+	// Handle SSH connection cleanup with better error handling
 	if rt.Client != nil {
 		key := fmt.Sprintf("%s@%s:%d", rt.Cfg.Auth.User, rt.Cfg.SSHHost, rt.Cfg.SSHPort)
-		state.connMu.Lock()
-		if conn, exists := state.connections[key]; exists {
-			conn.mu.Lock()
-			conn.refCount--
-			if conn.refCount == 0 {
-				log.Printf("Closing SSH connection for %s", key)
-				rt.Client.Close()
-				delete(state.connections, key)
-			} else {
-				log.Printf("Keeping SSH connection for %s (refCount: %d)", key, conn.refCount)
-				rt.Client = nil // Avoid closing shared client
+		
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("Panic in SSH connection cleanup: %v", r)
+				}
+			}()
+			
+			state.connMu.Lock()
+			defer state.connMu.Unlock()
+			
+			if conn, exists := state.connections[key]; exists {
+				conn.mu.Lock()
+				conn.refCount--
+				if conn.refCount <= 0 {
+					log.Printf("Closing SSH connection for %s", key)
+					func() {
+						defer func() {
+							if r := recover(); r != nil {
+								log.Printf("Panic closing SSH client: %v", r)
+							}
+						}()
+						rt.Client.Close()
+					}()
+					delete(state.connections, key)
+				} else {
+					log.Printf("Keeping SSH connection for %s (refCount: %d)", key, conn.refCount)
+					rt.Client = nil // Avoid closing shared client
+				}
+				conn.mu.Unlock()
 			}
-			conn.mu.Unlock()
-		}
-		state.connMu.Unlock()
+		}()
 	}
-
-	// Signal stopped and wait for goroutines
-	if rt.stopped != nil {
-		close(rt.stopped)
+	
+	// Wait for goroutines to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Panic waiting for goroutines: %v", r)
+			}
+		}()
+		rt.wg.Wait()
+		close(done)
+	}()
+	
+	select {
+	case <-done:
+		log.Printf("All goroutines stopped cleanly for %s@%s:%d", rt.Cfg.Auth.User, rt.Cfg.SSHHost, rt.Cfg.SSHPort)
+	case <-time.After(5 * time.Second):
+		log.Printf("Timeout waiting for goroutines to stop for %s@%s:%d", rt.Cfg.Auth.User, rt.Cfg.SSHHost, rt.Cfg.SSHPort)
 	}
 	
 	log.Printf("Tunnel stopped for %s@%s:%d", rt.Cfg.Auth.User, rt.Cfg.SSHHost, rt.Cfg.SSHPort)
