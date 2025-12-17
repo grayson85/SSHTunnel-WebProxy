@@ -511,27 +511,35 @@ func (state *AppState) addTunnelDialog(w fyne.Window, configFile string) {
 	proxyPassEntry.SetPlaceHolder("proxy_password")
 	proxyTLSCheck := widget.NewCheck("HTTPS Proxy", nil)
 
-	items := []*widget.FormItem{
-		{Text: "Name:", Widget: nameEntry},
-		{Text: "SSH Host:", Widget: sshHostEntry},
-		{Text: "SSH Port:", Widget: sshPortEntry},
-		{Text: "Username:", Widget: userEntry},
-		{Text: "Password:", Widget: passwordEntry},
-		{Text: "Key Path:", Widget: keyPathEntry},
-		{Text: "Key Passphrase:", Widget: keyPassEntry},
-		{Text: "", Widget: use2FACheck},
-		{Text: "Forward Type:", Widget: forwardTypeSelect},
-		{Text: "Local Address:", Widget: localAddrEntry},
-		{Text: "Remote Address:", Widget: remoteAddrEntry},
-		{Text: "", Widget: useProxyCheck},
-		{Text: "Proxy Host:", Widget: proxyHostEntry},
-		{Text: "Proxy Port:", Widget: proxyPortEntry},
-		{Text: "Proxy User:", Widget: proxyUserEntry},
-		{Text: "Proxy Pass:", Widget: proxyPassEntry},
-		{Text: "", Widget: proxyTLSCheck},
-	}
+	// Create form with scrollable content
+	form := widget.NewForm(
+		&widget.FormItem{Text: "Name:", Widget: nameEntry},
+		&widget.FormItem{Text: "SSH Host:", Widget: sshHostEntry},
+		&widget.FormItem{Text: "SSH Port:", Widget: sshPortEntry},
+		&widget.FormItem{Text: "Username:", Widget: userEntry},
+		&widget.FormItem{Text: "Password:", Widget: passwordEntry},
+		&widget.FormItem{Text: "Key Path:", Widget: keyPathEntry},
+		&widget.FormItem{Text: "Key Passphrase:", Widget: keyPassEntry},
+		&widget.FormItem{Text: "", Widget: use2FACheck},
+		&widget.FormItem{Text: "Forward Type:", Widget: forwardTypeSelect},
+		&widget.FormItem{Text: "Local Address:", Widget: localAddrEntry},
+		&widget.FormItem{Text: "Remote Address:", Widget: remoteAddrEntry},
+		&widget.FormItem{Text: "", Widget: useProxyCheck},
+		&widget.FormItem{Text: "Proxy Host:", Widget: proxyHostEntry},
+		&widget.FormItem{Text: "Proxy Port:", Widget: proxyPortEntry},
+		&widget.FormItem{Text: "Proxy User:", Widget: proxyUserEntry},
+		&widget.FormItem{Text: "Proxy Pass:", Widget: proxyPassEntry},
+		&widget.FormItem{Text: "", Widget: proxyTLSCheck},
+	)
+	form.SubmitText = ""
+	form.CancelText = ""
 
-	dialog.ShowForm("Add Tunnel", "Create", "Cancel", items, func(confirm bool) {
+	// Wrap form in a scroll container with fixed size
+	scrollContainer := container.NewVScroll(form)
+	scrollContainer.SetMinSize(fyne.NewSize(400, 450))
+
+	// Create custom dialog with scrollable content
+	d := dialog.NewCustomConfirm("Add Tunnel", "Create", "Cancel", scrollContainer, func(confirm bool) {
 		if !confirm {
 			return
 		}
@@ -587,6 +595,8 @@ func (state *AppState) addTunnelDialog(w fyne.Window, configFile string) {
 		}
 		state.refreshList()
 	}, w)
+	d.Resize(fyne.NewSize(450, 550))
+	d.Show()
 }
 
 func (state *AppState) editSelected(w fyne.Window, configFile string) {
@@ -638,26 +648,36 @@ func (state *AppState) editSelected(w fyne.Window, configFile string) {
 		proxyPassEntry.SetText(cfg.Proxy.Password)
 		proxyTLSCheck.SetChecked(cfg.Proxy.TLS)
 	}
-	items := []*widget.FormItem{
-		{Text: "Name:", Widget: nameEntry},
-		{Text: "SSH Host:", Widget: sshHostEntry},
-		{Text: "SSH Port:", Widget: sshPortEntry},
-		{Text: "Username:", Widget: userEntry},
-		{Text: "Password:", Widget: passwordEntry},
-		{Text: "Key Path:", Widget: keyPathEntry},
-		{Text: "Key Passphrase:", Widget: keyPassEntry},
-		{Text: "", Widget: use2FACheck},
-		{Text: "Forward Type:", Widget: forwardTypeSelect},
-		{Text: "Local Address:", Widget: localAddrEntry},
-		{Text: "Remote Address:", Widget: remoteAddrEntry},
-		{Text: "", Widget: useProxyCheck},
-		{Text: "Proxy Host:", Widget: proxyHostEntry},
-		{Text: "Proxy Port:", Widget: proxyPortEntry},
-		{Text: "Proxy User:", Widget: proxyUserEntry},
-		{Text: "Proxy Pass:", Widget: proxyPassEntry},
-		{Text: "", Widget: proxyTLSCheck},
-	}
-	dialog.ShowForm("Edit Tunnel", "Save", "Cancel", items, func(confirm bool) {
+
+	// Create form with scrollable content
+	form := widget.NewForm(
+		&widget.FormItem{Text: "Name:", Widget: nameEntry},
+		&widget.FormItem{Text: "SSH Host:", Widget: sshHostEntry},
+		&widget.FormItem{Text: "SSH Port:", Widget: sshPortEntry},
+		&widget.FormItem{Text: "Username:", Widget: userEntry},
+		&widget.FormItem{Text: "Password:", Widget: passwordEntry},
+		&widget.FormItem{Text: "Key Path:", Widget: keyPathEntry},
+		&widget.FormItem{Text: "Key Passphrase:", Widget: keyPassEntry},
+		&widget.FormItem{Text: "", Widget: use2FACheck},
+		&widget.FormItem{Text: "Forward Type:", Widget: forwardTypeSelect},
+		&widget.FormItem{Text: "Local Address:", Widget: localAddrEntry},
+		&widget.FormItem{Text: "Remote Address:", Widget: remoteAddrEntry},
+		&widget.FormItem{Text: "", Widget: useProxyCheck},
+		&widget.FormItem{Text: "Proxy Host:", Widget: proxyHostEntry},
+		&widget.FormItem{Text: "Proxy Port:", Widget: proxyPortEntry},
+		&widget.FormItem{Text: "Proxy User:", Widget: proxyUserEntry},
+		&widget.FormItem{Text: "Proxy Pass:", Widget: proxyPassEntry},
+		&widget.FormItem{Text: "", Widget: proxyTLSCheck},
+	)
+	form.SubmitText = ""
+	form.CancelText = ""
+
+	// Wrap form in a scroll container with fixed size
+	scrollContainer := container.NewVScroll(form)
+	scrollContainer.SetMinSize(fyne.NewSize(400, 450))
+
+	// Create custom dialog with scrollable content
+	d := dialog.NewCustomConfirm("Edit Tunnel", "Save", "Cancel", scrollContainer, func(confirm bool) {
 		if !confirm {
 			return
 		}
@@ -712,6 +732,8 @@ func (state *AppState) editSelected(w fyne.Window, configFile string) {
 		}
 		state.refreshList()
 	}, w)
+	d.Resize(fyne.NewSize(450, 550))
+	d.Show()
 }
 
 func (state *AppState) deleteSelected(configFile string) {
@@ -744,5 +766,3 @@ func (state *AppState) deleteSelected(configFile string) {
 	state.refreshList()
 	state.updateStatus()
 }
-
-
