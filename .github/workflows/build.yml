@@ -12,18 +12,19 @@ jobs:
         include:
           - os: ubuntu-latest
             suffix: linux-amd64
-          - os: macos-latest  # This will use Apple Silicon runners (M1/M2)
+          - os: macos-latest
             suffix: macos-universal
           - os: windows-latest
             suffix: windows-amd64
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
       
-      - run: go install fyne.io/fyne/v2/cmd/fyne@latest
+      # Install the modern Fyne tool
+      - run: go install fyne.io/tools/cmd/fyne@latest
       
       # Linux dependencies
       - if: runner.os == 'Linux'
@@ -34,9 +35,7 @@ jobs:
       
       # macOS dependencies
       - if: runner.os == 'macOS'
-        run: |
-          brew update || true
-          brew install glfw || true
+        run: brew install glfw
 
       # Build Linux binary
       - if: runner.os == 'Linux'
@@ -44,28 +43,39 @@ jobs:
           BIN_NAME="ssh-tunnel-gui-${{ matrix.suffix }}"
           go build -ldflags="-s -w" -o "$BIN_NAME" ./...
 
-      # Build macOS Universal .app (Intel + Apple Silicon)
+      # Build macOS Universal (Intel + Apple Silicon)
       - if: runner.os == 'macOS'
         run: |
-          BIN_NAME="ssh-tunnel-gui-${{ matrix.suffix }}"
-          # Use the universal flag to bundle both architectures
-          if [ -f "ssh.png" ]; then
-            fyne package -os darwin -name "$BIN_NAME" -icon ssh.png --appBuild universal ./...
-          else
-            fyne package -os darwin -name "$BIN_NAME" --appBuild universal ./...
-          fi
-          zip -r "$BIN_NAME.app.zip" "$BIN_NAME.app"
-          rm -rf "$BIN_NAME.app"
+          APP_NAME="ssh-tunnel-gui"
+          
+          # 1. Build for Apple Silicon (arm64)
+          GOARCH=arm64 fyne package -os darwin -name "${APP_NAME}-arm64" ./...
+          
+          # 2. Build for Intel (amd64)
+          GOARCH=amd64 fyne package -os darwin -name "${APP_NAME}-amd64" ./...
+          
+          # 3. Create the Universal App structure using the ARM64 build as a base
+          cp -R "${APP_NAME}-arm64.app" "${APP_NAME}-universal.app"
+          
+          # 4. Merge the binaries using lipo
+          lipo -create "${APP_NAME}-arm64.app/Contents/MacOS/${APP_NAME}-arm64" \
+                       "${APP_NAME}-amd64.app/Contents/MacOS/${APP_NAME}-amd64" \
+               -output "${APP_NAME}-universal.app/Contents/MacOS/${APP_NAME}-universal"
+          
+          # 5. Clean up old binary names inside the universal bundle
+          rm "${APP_NAME}-universal.app/Contents/MacOS/${APP_NAME}-arm64"
+          
+          # 6. Update Info.plist to point to the new binary name
+          sed -i '' "s/${APP_NAME}-arm64/${APP_NAME}-universal/g" "${APP_NAME}-universal.app/Contents/Info.plist"
+          
+          # Zip it up
+          zip -r "ssh-tunnel-gui-macos-universal.app.zip" "${APP_NAME}-universal.app"
 
       # Build Windows .exe
       - if: runner.os == 'Windows'
         run: |
           $BIN_NAME = "ssh-tunnel-gui-${{ matrix.suffix }}"
-          if (Test-Path "ssh.png") {
-            fyne package -os windows -name $BIN_NAME -icon ssh.png ./...
-          } else {
-            fyne package -os windows -name $BIN_NAME ./...
-          }
+          fyne package -os windows -name $BIN_NAME ./...
         shell: powershell
 
       - name: Upload artifacts
@@ -73,9 +83,9 @@ jobs:
         with:
           name: ssh-tunnel-gui-${{ matrix.suffix }}
           path: |
-            ssh-tunnel-gui-${{ matrix.suffix }}
-            ssh-tunnel-gui-${{ matrix.suffix }}.app.zip
-            ssh-tunnel-gui-${{ matrix.suffix }}.exe
+            ssh-tunnel-gui-linux-amd64
+            ssh-tunnel-gui-macos-universal.app.zip
+            ssh-tunnel-gui-windows-amd64.exe
           retention-days: 30
 
   release:
@@ -86,17 +96,13 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: ./artifacts
-
       - name: Prepare release files
         run: |
           mkdir -p ./release-files
           find ./artifacts -type f -exec cp {} ./release-files/ \;
-
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
