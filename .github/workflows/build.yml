@@ -11,16 +11,10 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            arch: amd64
             suffix: linux-amd64
-          - os: macos-13
-            arch: amd64
-            suffix: macos-amd64
-          - os: macos-14
-            arch: arm64
-            suffix: macos-arm64
+          - os: macos-latest  # This will use Apple Silicon runners (M1/M2)
+            suffix: macos-universal
           - os: windows-latest
-            arch: amd64
             suffix: windows-amd64
     steps:
       - uses: actions/checkout@v4
@@ -49,20 +43,19 @@ jobs:
         run: |
           BIN_NAME="ssh-tunnel-gui-${{ matrix.suffix }}"
           go build -ldflags="-s -w" -o "$BIN_NAME" ./...
-          ls -la
 
-      # Build macOS .app and zip
+      # Build macOS Universal .app (Intel + Apple Silicon)
       - if: runner.os == 'macOS'
         run: |
           BIN_NAME="ssh-tunnel-gui-${{ matrix.suffix }}"
+          # Use the universal flag to bundle both architectures
           if [ -f "ssh.png" ]; then
-            fyne package -os darwin -name "$BIN_NAME" -icon ssh.png ./...
+            fyne package -os darwin -name "$BIN_NAME" -icon ssh.png --appBuild universal ./...
           else
-            fyne package -os darwin -name "$BIN_NAME" ./...
+            fyne package -os darwin -name "$BIN_NAME" --appBuild universal ./...
           fi
           zip -r "$BIN_NAME.app.zip" "$BIN_NAME.app"
           rm -rf "$BIN_NAME.app"
-          ls -la
 
       # Build Windows .exe
       - if: runner.os == 'Windows'
@@ -73,7 +66,6 @@ jobs:
           } else {
             fyne package -os windows -name $BIN_NAME ./...
           }
-          Get-ChildItem
         shell: powershell
 
       - name: Upload artifacts
@@ -100,15 +92,10 @@ jobs:
         with:
           path: ./artifacts
 
-      - name: Display structure
-        run: find ./artifacts -type f
-
       - name: Prepare release files
         run: |
           mkdir -p ./release-files
-          # Copy all files from each artifact directory
           find ./artifacts -type f -exec cp {} ./release-files/ \;
-          ls -la ./release-files/
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -116,8 +103,6 @@ jobs:
           tag_name: v2.0-${{ github.run_number }}
           name: Release v2.0-${{ github.run_number }}
           files: ./release-files/*
-          draft: false
-          prerelease: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
