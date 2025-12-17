@@ -82,8 +82,13 @@ jobs:
       # Build Windows .exe
       - if: runner.os == 'Windows'
         run: |
-          $BIN_NAME = "ssh-tunnel-gui-${{ matrix.suffix }}"
-          fyne package -os windows -name $BIN_NAME ./...
+          $BIN_NAME = "ssh-tunnel-gui-windows-amd64"
+          # Check if ssh.png exists, otherwise package without -icon
+          if (Test-Path "ssh.png") {
+            fyne package -os windows -name $BIN_NAME -icon ssh.png ./...
+          } else {
+            fyne package -os windows -name $BIN_NAME ./...
+          }
         shell: powershell
 
       - name: Upload artifacts
@@ -94,6 +99,7 @@ jobs:
             ssh-tunnel-gui-linux-amd64
             ssh-tunnel-gui-macos-universal.app.zip
             ssh-tunnel-gui-windows-amd64.exe
+          # Note: We use the specific names created in the steps above
           retention-days: 30
 
   release:
