@@ -48,27 +48,35 @@ jobs:
         run: |
           APP_NAME="ssh-tunnel-gui"
           
+          # Define icon flag if ssh.png exists
+          ICON_FLAG=""
+          if [ -f "ssh.png" ]; then
+            ICON_FLAG="-icon ssh.png"
+          fi
+
           # 1. Build for Apple Silicon (arm64)
-          GOARCH=arm64 fyne package -os darwin -name "${APP_NAME}-arm64" ./...
+          GOARCH=arm64 fyne package -os darwin -name "${APP_NAME}-arm64" $ICON_FLAG ./...
           
           # 2. Build for Intel (amd64)
-          GOARCH=amd64 fyne package -os darwin -name "${APP_NAME}-amd64" ./...
+          GOARCH=amd64 fyne package -os darwin -name "${APP_NAME}-amd64" $ICON_FLAG ./...
           
-          # 3. Create the Universal App structure using the ARM64 build as a base
+          # 3. Create the Universal App structure
           cp -R "${APP_NAME}-arm64.app" "${APP_NAME}-universal.app"
           
           # 4. Merge the binaries using lipo
+          # Note: Fyne names the binary inside the .app bundle based on the -name flag
           lipo -create "${APP_NAME}-arm64.app/Contents/MacOS/${APP_NAME}-arm64" \
                        "${APP_NAME}-amd64.app/Contents/MacOS/${APP_NAME}-amd64" \
                -output "${APP_NAME}-universal.app/Contents/MacOS/${APP_NAME}-universal"
           
-          # 5. Clean up old binary names inside the universal bundle
+          # 5. Clean up the single-arch binary that was copied in step 3
           rm "${APP_NAME}-universal.app/Contents/MacOS/${APP_NAME}-arm64"
           
-          # 6. Update Info.plist to point to the new binary name
+          # 6. Update Info.plist to point to the new merged binary name
+          # On macOS 'sed -i' requires an empty string argument for the backup extension
           sed -i '' "s/${APP_NAME}-arm64/${APP_NAME}-universal/g" "${APP_NAME}-universal.app/Contents/Info.plist"
           
-          # Zip it up
+          # 7. Zip it up
           zip -r "ssh-tunnel-gui-macos-universal.app.zip" "${APP_NAME}-universal.app"
 
       # Build Windows .exe
