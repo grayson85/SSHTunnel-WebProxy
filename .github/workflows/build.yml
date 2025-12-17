@@ -46,38 +46,40 @@ jobs:
       # Build macOS Universal (Intel + Apple Silicon)
       - if: runner.os == 'macOS'
         run: |
-          APP_NAME="ssh-tunnel-gui"
+          # Use a simple name without dashes for the internal binary to avoid naming issues
+          INTERNAL_NAME="sshtunnel"
           
-          # Define icon flag if ssh.png exists
           ICON_FLAG=""
           if [ -f "ssh.png" ]; then
             ICON_FLAG="-icon ssh.png"
           fi
 
           # 1. Build for Apple Silicon (arm64)
-          GOARCH=arm64 fyne package -os darwin -name "${APP_NAME}-arm64" $ICON_FLAG ./...
+          GOARCH=arm64 fyne package -os darwin -name "arm_build" $ICON_FLAG ./...
           
           # 2. Build for Intel (amd64)
-          GOARCH=amd64 fyne package -os darwin -name "${APP_NAME}-amd64" $ICON_FLAG ./...
+          GOARCH=amd64 fyne package -os darwin -name "intel_build" $ICON_FLAG ./...
           
           # 3. Create the Universal App structure
-          cp -R "${APP_NAME}-arm64.app" "${APP_NAME}-universal.app"
+          cp -R "arm_build.app" "ssh-tunnel-gui-universal.app"
           
           # 4. Merge the binaries using lipo
-          # Note: Fyne names the binary inside the .app bundle based on the -name flag
-          lipo -create "${APP_NAME}-arm64.app/Contents/MacOS/${APP_NAME}-arm64" \
-                       "${APP_NAME}-amd64.app/Contents/MacOS/${APP_NAME}-amd64" \
-               -output "${APP_NAME}-universal.app/Contents/MacOS/${APP_NAME}-universal"
+          # We target the binary inside Contents/MacOS/ regardless of what Fyne named it
+          lipo -create "arm_build.app/Contents/MacOS/"* \
+                       "intel_build.app/Contents/MacOS/"* \
+               -output "ssh-tunnel-gui-universal.app/Contents/MacOS/ssh-tunnel-gui-universal"
           
-          # 5. Clean up the single-arch binary that was copied in step 3
-          rm "${APP_NAME}-universal.app/Contents/MacOS/${APP_NAME}-arm64"
+          # 5. Remove the old single-arch binaries from the universal bundle
+          # This leaves only the new 'ssh-tunnel-gui-universal' file
+          find "ssh-tunnel-gui-universal.app/Contents/MacOS" -type f ! -name "ssh-tunnel-gui-universal" -delete
           
           # 6. Update Info.plist to point to the new merged binary name
-          # On macOS 'sed -i' requires an empty string argument for the backup extension
-          sed -i '' "s/${APP_NAME}-arm64/${APP_NAME}-universal/g" "${APP_NAME}-universal.app/Contents/Info.plist"
+          # We use a wildcard to replace whatever name Fyne put in the CFBundleExecutable field
+          CURRENT_EXE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "ssh-tunnel-gui-universal.app/Contents/Info.plist")
+          sed -i '' "s/>$CURRENT_EXE</>ssh-tunnel-gui-universal</g" "ssh-tunnel-gui-universal.app/Contents/Info.plist"
           
           # 7. Zip it up
-          zip -r "ssh-tunnel-gui-macos-universal.app.zip" "${APP_NAME}-universal.app"
+          zip -r "ssh-tunnel-gui-macos-universal.app.zip" "ssh-tunnel-gui-universal.app"
 
       # Build Windows .exe
       - if: runner.os == 'Windows'
